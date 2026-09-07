@@ -1,0 +1,58 @@
+{
+  "name": "postifys-mcp",
+  "version": "0.1.0",
+  "description": "Official Postifys MCP server: publish to Facebook, Instagram, YouTube, Pinterest, LinkedIn, and TikTok via the production Postifys API. Includes media upload and Content Queue tools.",
+  "type": "module",
+  "bin": {
+    "postifys-mcp": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "cursor.mcp.example.json"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "smoke": "npm run build && node dist/smoke.js"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "postifys",
+    "social-media",
+    "facebook",
+    "instagram",
+    "youtube",
+    "pinterest",
+    "linkedin",
+    "tiktok",
+    "n8n"
+  ],
+  "license": "MIT",
+  "homepage": "https://postifys.com/mcp",
+  "author": {
+    "name": "Muhammad Farooq Iqbal",
+    "email": "mfarooqiqbal143@gmail.com",
+    "url": "https://postifys.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mfarooqone/postifys-mcp.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.3"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "postifys": {
+      "command": "npx",
+      "args": ["-y", "postifys-mcp"],
+      "env": {
+        "POSTIFYS_API_KEY": "pfs_your_api_key_here",
+        "POSTIFYS_SERVER_URL": "https://postifys.com"
+      }
+    }
+  }
+}
