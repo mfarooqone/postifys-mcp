@@ -5,7 +5,7 @@ export const HONEST_LIMITS = [
   'LinkedIn supports member profiles only (no Company Pages).',
   'Pinterest supports image Pins; boardId is required. Video Pins are not claimed.',
   'Prefer Media upload → serve_url → Publish. Do not pass raw Google Drive or Dropbox URLs directly to publish tools.',
-  'Publishing requires an entitled Postifys account ($2/seat/month after trial). The MCP package itself is free.',
+  'Publishing requires an entitled Postifys account ($4 for the first seat, then $2 per extra seat per month after trial). The MCP package itself is free.',
 ].join(' ');
 
 export const CQ_DESCRIPTION =

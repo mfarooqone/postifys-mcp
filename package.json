@@ -1,10 +1,10 @@
 {
   "name": "postifys-mcp",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Official Postifys MCP server: publish to Facebook, Instagram, YouTube, Pinterest, LinkedIn, and TikTok via the production Postifys API. Includes media upload and Content Queue tools.",
   "type": "module",
   "bin": {
-    "postifys-mcp": "dist/index.js"
+    "postifys-mcp": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
@@ -18,7 +18,8 @@
     "prepublishOnly": "npm run build",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "smoke": "npm run build && node dist/smoke.js"
+    "smoke": "npm run build && node dist/smoke.js",
+    "test:mcp": "npm run build && node dist/test-mcp-full.js"
   },
   "keywords": [
     "mcp",
