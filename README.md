@@ -13,6 +13,23 @@ The package is free. Publishing still requires a Postifys entitlement (trial or 
 - Configurable `POSTIFYS_TIMEOUT_MS`, `POSTIFYS_MAX_RETRIES`, `POSTIFYS_RETRY_BASE_MS`.
 - Handles a missing `postId` safely; server version read from package.json.
 
+## Cursor plugin (Marketplace)
+
+This repo is also a [Cursor plugin](https://cursor.com/docs/reference/plugins) named `postifys`:
+
+- `.cursor-plugin/plugin.json`: manifest. Declares one variable, `POSTIFYS_API_KEY`, which is required.
+- `mcp.json`: starts the server with `npx -y postifys-mcp@latest` and passes `POSTIFYS_API_KEY` in.
+- `skills/postifys/SKILL.md`: tells the agent how to publish with these tools.
+- `assets/logo.png`: the plugin logo.
+
+To set it up:
+
+1. Install **Postifys** from the Cursor Marketplace.
+2. Open **Plugins → Postifys → Configure**.
+3. Paste your API key (from Postifys → Settings → API keys).
+
+The plugin always talks to `https://postifys.com`. To point it at another server, or to change the timeout or retry settings, use the manual MCP config below with the environment variables listed under *Env*.
+
 ## Install (Cursor)
 
 1. Create an API key in Postifys → Settings (scopes: `connections`, `media`, `publish`, `status`).

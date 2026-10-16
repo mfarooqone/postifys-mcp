@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "postifys": {
+      "command": "npx",
+      "args": ["-y", "postifys-mcp@latest"],
+      "env": {
+        "POSTIFYS_API_KEY": "${POSTIFYS_API_KEY}"
+      }
+    }
+  }
+}

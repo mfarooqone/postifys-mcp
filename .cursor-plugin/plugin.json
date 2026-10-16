@@ -1,0 +1,26 @@
+{
+  "name": "postifys",
+  "description": "Publish to Facebook, Instagram, YouTube, Pinterest, LinkedIn, and TikTok from Cursor via the Postifys API: list connected accounts, upload media, publish, poll status, browse post history, retry failed posts, and manage the Content Queue.",
+  "version": "0.2.0",
+  "author": {
+    "name": "Muhammad Farooq Iqbal",
+    "email": "mfarooqiqbal143@gmail.com"
+  },
+  "homepage": "https://postifys.com",
+  "repository": "https://github.com/mfarooqone/postifys-mcp",
+  "license": "MIT",
+  "logo": "assets/logo.png",
+  "keywords": ["postifys", "social-media", "publishing", "facebook", "instagram", "youtube", "pinterest", "linkedin", "tiktok", "mcp", "scheduling"],
+  "variables": {
+    "type": "object",
+    "properties": {
+      "POSTIFYS_API_KEY": {
+        "type": "string",
+        "title": "Postifys API key",
+        "description": "Secret. Create one in Postifys → Settings → API keys (starts with pfs_). Keep it private.",
+        "minLength": 8
+      }
+    },
+    "required": ["POSTIFYS_API_KEY"]
+  }
+}
