@@ -4,7 +4,7 @@
   "description": "Official Postifys MCP server: publish to Facebook, Instagram, YouTube, Pinterest, LinkedIn, and TikTok via the production Postifys API. Includes media upload and Content Queue tools.",
   "type": "module",
   "bin": {
-    "postifys-mcp": "./dist/index.js"
+    "postifys-mcp": "dist/index.js"
   },
   "main": "./dist/index.js",
   "files": [
