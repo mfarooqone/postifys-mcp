@@ -4,6 +4,15 @@ Official [Model Context Protocol](https://modelcontextprotocol.io) server for [P
 
 The package is free. Publishing still requires a Postifys entitlement (trial or paid seat).
 
+## What's new in 0.2.0
+
+- New tools: `postifys_list_post_history` and `postifys_retry_post`.
+- `accountId` is optional (Postifys uses your default account per platform).
+- Default `type` now matches the API docs: Facebook `IMAGE` with media / `FEED` without; Instagram `IMAGE` (pass `REEL` for video).
+- Automatic retries with backoff for 429/5xx; publishes always send an `Idempotency-Key` so retries never double-post.
+- Configurable `POSTIFYS_TIMEOUT_MS`, `POSTIFYS_MAX_RETRIES`, `POSTIFYS_RETRY_BASE_MS`.
+- Handles a missing `postId` safely; server version read from package.json.
+
 ## Install (Cursor)
 
 1. Create an API key in Postifys → Settings (scopes: `connections`, `media`, `publish`, `status`).
