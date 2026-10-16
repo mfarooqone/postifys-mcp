@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { PostifysApiError, PostifysClient, firstString, normalizeMediaUrls, toolError, toolResult } from '../client.js';
+import { PostifysApiError, PostifysClient, firstString, newIdempotencyKey, normalizeMediaUrls, toolError, toolResult } from '../client.js';
 import { HONEST_LIMITS } from '../honesty.js';
 
 const BLOCKED_DIRECT_URL = /drive\.google\.com|dropbox\.com|dropboxusercontent\.com/i;
@@ -16,16 +16,17 @@ const assertDirectUrls = (urls: string[], label = 'Media URL') => {
   }
 };
 
-const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: Record<string, unknown> } => {
+export const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: Record<string, unknown> } => {
   const platform = args.platform as string;
   const asyncPublish = args.async !== false;
 
   if (platform === 'facebook') {
+    // pageId is optional: the API falls back to the account's default Page.
     const pageId = String(args.accountId || '').trim();
-    const type = String(args.type || (args.mediaUrls?.length ? 'REEL' : 'FEED')).toUpperCase();
     const text = String(args.text || '').trim();
     const mediaUrls = normalizeMediaUrls(args.mediaUrls);
-    if (!pageId) throw new PostifysApiError('accountId (Facebook pageId) is required.', { code: 'VALIDATION', statusCode: 400 });
+    // Docs: type defaults based on payload -> IMAGE when media is present, FEED otherwise.
+    const type = String(args.type || (mediaUrls.length ? 'IMAGE' : 'FEED')).toUpperCase();
     if (!text && !mediaUrls.length) {
       throw new PostifysApiError('Facebook posts require text or mediaUrls.', { code: 'VALIDATION', statusCode: 400 });
     }
@@ -34,8 +35,8 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     }
     assertDirectUrls(mediaUrls);
     const body: Record<string, unknown> = {
-      pageId,
-      type: mediaUrls.length ? (type === 'VIDEO' ? 'REEL' : type) : 'FEED',
+      ...(pageId ? { pageId } : {}),
+      type: mediaUrls.length ? (type === 'VIDEO' ? 'REEL' : type === 'STORY' ? 'STORIES' : type) : 'FEED',
       text,
       mediaUrls,
       async: asyncPublish,
@@ -47,20 +48,19 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
 
   if (platform === 'instagram') {
     const instagramAccountId = String(args.accountId || '').trim();
-    let type = String(args.type || 'REEL').toUpperCase();
-    if (type === 'FEED') type = 'REEL';
-    if (type === 'VIDEO') type = 'REEL';
+    // Docs: IMAGE, VIDEO, REEL, or STORIES (alias STORY); default IMAGE.
+    let type = String(args.type || 'IMAGE').toUpperCase();
+    if (type === 'FEED') type = 'IMAGE';
+    if (type === 'VIDEO' || type === 'REELS') type = 'REEL';
+    if (type === 'STORY') type = 'STORIES';
     const text = String(args.text || '').trim();
     const mediaUrls = normalizeMediaUrls(args.mediaUrls);
-    if (!instagramAccountId) {
-      throw new PostifysApiError('accountId (instagramAccountId) is required.', { code: 'VALIDATION', statusCode: 400 });
-    }
     if (!mediaUrls.length) {
       throw new PostifysApiError('Instagram posts require mediaUrls.', { code: 'VALIDATION', statusCode: 400 });
     }
     assertDirectUrls(mediaUrls);
     const body: Record<string, unknown> = {
-      instagramAccountId,
+      ...(instagramAccountId ? { instagramAccountId } : {}),
       type,
       text,
       mediaUrls,
@@ -75,7 +75,6 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     const channelId = String(args.accountId || '').trim();
     const title = String(args.title || args.text || '').trim();
     const videoUrl = firstString(args.videoUrl, normalizeMediaUrls(args.mediaUrls)[0]);
-    if (!channelId) throw new PostifysApiError('accountId (channelId) is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!title) throw new PostifysApiError('YouTube title is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!videoUrl) throw new PostifysApiError('YouTube videoUrl is required.', { code: 'VALIDATION', statusCode: 400 });
     assertDirectUrls([videoUrl], 'videoUrl');
@@ -83,7 +82,7 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     return {
       endpoint: '/api/youtube/post',
       body: {
-        channelId,
+        ...(channelId ? { channelId } : {}),
         title,
         description: args.description || '',
         videoUrl,
@@ -102,7 +101,6 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     const boardId = String(args.boardId || '').trim();
     const title = String(args.title || args.text || '').trim();
     const imageUrl = firstString(args.imageUrl, normalizeMediaUrls(args.mediaUrls)[0]);
-    if (!pinterestUserId) throw new PostifysApiError('accountId (pinterestUserId) is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!boardId) throw new PostifysApiError('boardId is required for Pinterest.', { code: 'VALIDATION', statusCode: 400 });
     if (!title) throw new PostifysApiError('Pinterest title is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!imageUrl) throw new PostifysApiError('Pinterest imageUrl is required.', { code: 'VALIDATION', statusCode: 400 });
@@ -110,7 +108,7 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     return {
       endpoint: '/api/pinterest/post',
       body: {
-        pinterestUserId,
+        ...(pinterestUserId ? { pinterestUserId } : {}),
         boardId,
         title,
         description: args.description || '',
@@ -125,7 +123,6 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     const linkedinUserId = String(args.accountId || '').trim();
     const postType = String(args.type || args.postType || 'text').toLowerCase();
     const text = String(args.text || '').trim();
-    if (!linkedinUserId) throw new PostifysApiError('accountId (linkedinUserId) is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!text) throw new PostifysApiError('LinkedIn text is required.', { code: 'VALIDATION', statusCode: 400 });
     const imageUrl = firstString(args.imageUrl, postType === 'image' ? normalizeMediaUrls(args.mediaUrls)[0] : '');
     const videoUrl = firstString(args.videoUrl, postType === 'video' ? normalizeMediaUrls(args.mediaUrls)[0] : '');
@@ -140,7 +137,7 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     return {
       endpoint: '/api/linkedin/post',
       body: {
-        linkedinUserId,
+        ...(linkedinUserId ? { linkedinUserId } : {}),
         postType,
         text,
         title: args.title || '',
@@ -158,7 +155,6 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     const videoUrl = firstString(args.videoUrl, normalizeMediaUrls(args.mediaUrls)[0]);
     const caption = String(args.caption || args.text || '').trim();
     const consent = Boolean(args.consent || args.musicUsageConfirmed);
-    if (!tiktokAccountId) throw new PostifysApiError('accountId (tiktokAccountId) is required.', { code: 'VALIDATION', statusCode: 400 });
     if (!videoUrl) throw new PostifysApiError('TikTok videoUrl is required.', { code: 'VALIDATION', statusCode: 400 });
     assertDirectUrls([videoUrl], 'videoUrl');
     if (postMode === 'direct' && !args.privacy) {
@@ -170,7 +166,7 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
     return {
       endpoint: '/api/tiktok/post',
       body: {
-        tiktokAccountId,
+        ...(tiktokAccountId ? { tiktokAccountId } : {}),
         videoUrl,
         caption,
         privacy: args.privacy || 'SELF_ONLY',
@@ -191,6 +187,44 @@ const buildPublishBody = (args: Record<string, any>): { endpoint: string; body: 
   throw new PostifysApiError(`Unsupported platform: ${platform}`, { code: 'VALIDATION', statusCode: 400 });
 };
 
+export const summarizePublishResponse = (
+  platform: string,
+  data: Record<string, any>,
+  idempotencyKey: string,
+  asyncPublish: boolean,
+) => {
+  const postId = firstString(data.postId, data.postSubmissionId, data.historyId, data.id, data.data?.id, data.data?.postId);
+  const syncPublished = !asyncPublish && data.success !== false && !data.accepted;
+  if (!postId) {
+    // The API accepted the request but did not return an id we can poll.
+    return {
+      success: true,
+      platform,
+      accepted: data.accepted ?? true,
+      postId: null,
+      status: syncPublished ? 'published' : (data.status || 'unknown'),
+      shouldPoll: false,
+      idempotencyKey,
+      warning: 'Postifys did not return a postId. Do not re-publish blindly: check postifys_list_post_history (filter by platform) to find this post, or re-send with the same idempotencyKey.',
+      raw: data,
+    };
+  }
+  return {
+    success: true,
+    platform,
+    accepted: data.accepted ?? true,
+    postId,
+    historyId: data.historyId || postId,
+    status: syncPublished ? 'published' : (data.status || 'queued'),
+    shouldPoll: !syncPublished,
+    idempotencyKey,
+    message: syncPublished
+      ? 'Published synchronously.'
+      : 'Call postifys_get_post_status with this postId until status is published or failed.',
+    raw: data,
+  };
+};
+
 export const registerPublishTools = (server: McpServer, client: PostifysClient) => {
   server.registerTool(
     'postifys_publish',
@@ -198,7 +232,8 @@ export const registerPublishTools = (server: McpServer, client: PostifysClient) 
       description: `Publish asynchronously to one platform. Always returns a postId to poll with postifys_get_post_status. Prefer Postifys serve_url media. ${HONEST_LIMITS}`,
       inputSchema: {
         platform: z.enum(['facebook', 'instagram', 'youtube', 'pinterest', 'linkedin', 'tiktok']),
-        accountId: z.string().min(1).describe('Target account id from postifys_list_connections'),
+        accountId: z.string().optional()
+          .describe('Target account id from postifys_list_connections. Optional: when omitted the API uses your default/first connected account for that platform.'),
         text: z.string().optional().describe('Caption / message / LinkedIn text'),
         title: z.string().optional(),
         description: z.string().optional(),
@@ -208,7 +243,7 @@ export const registerPublishTools = (server: McpServer, client: PostifysClient) 
         imageUrl: z.string().optional(),
         thumbnailUrl: z.string().optional(),
         type: z.string().optional()
-          .describe('Post type: FB IMAGE|REEL|FEED|STORIES; IG IMAGE|REEL|STORIES; LinkedIn text|image|video|link'),
+          .describe('Post type. Facebook IMAGE|REEL|FEED|STORIES (default IMAGE with media, FEED without). Instagram IMAGE|REEL|STORIES (default IMAGE). LinkedIn text|image|video|link (default text).'),
         boardId: z.string().optional().describe('Required for Pinterest'),
         link: z.string().optional(),
         collaborators: z.string().optional().describe('FB Page IDs or IG usernames'),
@@ -229,32 +264,21 @@ export const registerPublishTools = (server: McpServer, client: PostifysClient) 
         isAigc: z.boolean().optional(),
         proxyDownload: z.boolean().optional(),
         async: z.boolean().optional().describe('Default true'),
-        idempotencyKey: z.string().optional(),
+        idempotencyKey: z.string().optional()
+          .describe('Optional. One is auto-generated per call so transient 429/5xx failures can be retried without double-posting.'),
       },
     },
     async (args) => {
       try {
         const { endpoint, body } = buildPublishBody(args);
-        const headers: Record<string, string> = {};
-        if (args.idempotencyKey) headers['Idempotency-Key'] = args.idempotencyKey;
+        const idempotencyKey = String(args.idempotencyKey || '').trim() || newIdempotencyKey();
         const data = await client.request<Record<string, unknown>>({
           path: endpoint,
           method: 'POST',
           body,
-          headers,
+          headers: { 'Idempotency-Key': idempotencyKey },
         });
-        const postId = firstString(data.postId, data.historyId, data.id);
-        return toolResult({
-          success: true,
-          platform: args.platform,
-          accepted: data.accepted ?? true,
-          postId,
-          historyId: data.historyId || postId,
-          status: data.status || 'queued',
-          shouldPoll: true,
-          message: 'Call postifys_get_post_status with this postId until status is published or failed.',
-          raw: data,
-        });
+        return toolResult(summarizePublishResponse(args.platform, data, idempotencyKey, body.async !== false));
       } catch (error) {
         return toolError(error);
       }
@@ -289,6 +313,64 @@ export const registerPublishTools = (server: McpServer, client: PostifysClient) 
           failed: status === 'failed',
           failureReason: data.failureReason || data.error || null,
           data,
+        });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'postifys_list_post_history',
+    {
+      description: 'List recent publish history (newest first) with status and failure reasons. Use it to find failed posts to retry, or to locate a post when publish returned no postId.',
+      inputSchema: {
+        status: z.enum(['all', 'failed', 'published', 'pending', 'queued', 'processing', 'active']).optional(),
+        platform: z.enum(['facebook', 'instagram', 'youtube', 'pinterest', 'linkedin', 'tiktok']).optional(),
+        page: z.number().int().min(1).optional(),
+        limit: z.number().int().min(1).max(100).optional().describe('Page size (default 20, max 100)'),
+      },
+    },
+    async ({ status, platform, page, limit }) => {
+      try {
+        const data = await client.request<Record<string, any>>({
+          path: '/api/posts/history',
+          query: { status, platform, page, limit },
+        });
+        return toolResult({ success: true, ...data });
+      } catch (error) {
+        return toolError(error);
+      }
+    },
+  );
+
+  server.registerTool(
+    'postifys_retry_post',
+    {
+      description: 'Retry a failed post by its postId/historyId (only status=failed posts can be retried). Returns a new postId to poll with postifys_get_post_status.',
+      inputSchema: {
+        postId: z.string().min(1),
+      },
+    },
+    async ({ postId }) => {
+      try {
+        // Retry creates a new submission and the endpoint has no idempotency
+        // support, so it is never auto-retried on 429/5xx.
+        const data = await client.request<Record<string, any>>({
+          path: `/api/posts/${encodeURIComponent(postId)}/retry`,
+          method: 'POST',
+          body: {},
+          retry: false,
+        });
+        const newPostId = firstString(data.postId, data.postSubmissionId, data.historyId);
+        return toolResult({
+          success: true,
+          retriedPostId: postId,
+          postId: newPostId || null,
+          status: data.status || 'queued',
+          shouldPoll: Boolean(newPostId),
+          ...(newPostId ? {} : { warning: 'No new postId returned; check postifys_list_post_history.' }),
+          raw: data,
         });
       } catch (error) {
         return toolError(error);

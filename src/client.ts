@@ -1,7 +1,30 @@
+import { randomUUID } from 'node:crypto';
+
 export type PostifysConfig = {
   apiKey: string;
   serverUrl: string;
+  /** Per-attempt request timeout (POSTIFYS_TIMEOUT_MS, default 60000). */
+  timeoutMs?: number;
+  /** Max retries for retryable failures (POSTIFYS_MAX_RETRIES, default 3). */
+  maxRetries?: number;
+  /** Base backoff delay (POSTIFYS_RETRY_BASE_MS, default 500). */
+  retryBaseMs?: number;
 };
+
+export const DEFAULT_TIMEOUT_MS = 60_000;
+export const DEFAULT_MAX_RETRIES = 3;
+export const DEFAULT_RETRY_BASE_MS = 500;
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+const IDEMPOTENT_METHODS = new Set(['GET', 'HEAD', 'OPTIONS', 'PUT', 'DELETE']);
+
+const envNumber = (name: string, fallback: number, min = 0): number => {
+  const raw = String(process.env[name] ?? '').trim();
+  if (!raw) return fallback;
+  const value = Number(raw);
+  return Number.isFinite(value) && value >= min ? value : fallback;
+};
+
+export const newIdempotencyKey = (): string => `mcp_${randomUUID()}`;
 
 export class PostifysApiError extends Error {
   statusCode: number;
@@ -28,7 +51,13 @@ export const loadConfig = (): PostifysConfig => {
     );
   }
   const serverUrl = trimTrailingSlash(process.env.POSTIFYS_SERVER_URL || 'https://postifys.com');
-  return { apiKey, serverUrl };
+  return {
+    apiKey,
+    serverUrl,
+    timeoutMs: envNumber('POSTIFYS_TIMEOUT_MS', DEFAULT_TIMEOUT_MS, 1000),
+    maxRetries: Math.floor(envNumber('POSTIFYS_MAX_RETRIES', DEFAULT_MAX_RETRIES, 0)),
+    retryBaseMs: envNumber('POSTIFYS_RETRY_BASE_MS', DEFAULT_RETRY_BASE_MS, 0),
+  };
 };
 
 type RequestOptions = {
@@ -38,6 +67,18 @@ type RequestOptions = {
   body?: unknown;
   headers?: Record<string, string>;
   timeoutMs?: number;
+  /** Override retry safety. Defaults: idempotent HTTP methods, or POST with an Idempotency-Key header. */
+  retry?: boolean;
+};
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const parseRetryAfterMs = (value: string | null): number | null => {
+  if (!value) return null;
+  const seconds = Number(value);
+  if (Number.isFinite(seconds) && seconds >= 0) return seconds * 1000;
+  const date = Date.parse(value);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : null;
 };
 
 export class PostifysClient {
@@ -58,13 +99,43 @@ export class PostifysClient {
     return url.toString();
   }
 
+  /**
+   * Request with retry + exponential backoff (jitter, honours Retry-After) for
+   * 429 / 5xx / network errors. Non-idempotent requests (POST/PATCH) are only
+   * retried when they carry an Idempotency-Key, so a publish is never duplicated.
+   */
   async request<T = Record<string, unknown>>(options: RequestOptions): Promise<T> {
+    const method = (options.method || (options.body !== undefined ? 'POST' : 'GET')).toUpperCase();
+    const headerKeys = Object.keys(options.headers || {}).map((key) => key.toLowerCase());
+    const retrySafe = options.retry ?? (IDEMPOTENT_METHODS.has(method) || headerKeys.includes('idempotency-key'));
+    const maxRetries = retrySafe ? Math.max(0, this.config.maxRetries ?? DEFAULT_MAX_RETRIES) : 0;
+    const baseMs = this.config.retryBaseMs ?? DEFAULT_RETRY_BASE_MS;
+
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.requestOnce<T>(options, method);
+      } catch (error) {
+        const apiError = error as PostifysApiError & { retryAfterMs?: number | null };
+        const retryable = apiError instanceof PostifysApiError
+          && (RETRYABLE_STATUS.has(apiError.statusCode)
+            || apiError.code === 'POSTIFYS_NETWORK_ERROR'
+            || apiError.code === 'POSTIFYS_TIMEOUT');
+        if (!retryable || attempt >= maxRetries) throw error;
+        const backoff = baseMs * 2 ** attempt;
+        const jitter = Math.random() * baseMs;
+        const delay = Math.min(30_000, apiError.retryAfterMs ?? (backoff + jitter));
+        await sleep(delay);
+      }
+    }
+  }
+
+  private async requestOnce<T>(options: RequestOptions, method: string): Promise<T> {
     const controller = new AbortController();
-    const timeoutMs = options.timeoutMs ?? 60_000;
+    const timeoutMs = options.timeoutMs ?? this.config.timeoutMs ?? DEFAULT_TIMEOUT_MS;
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await fetch(this.buildUrl(options.path, options.query), {
-        method: options.method || (options.body !== undefined ? 'POST' : 'GET'),
+        method,
         headers: {
           Authorization: `Bearer ${this.config.apiKey}`,
           Accept: 'application/json',
@@ -91,11 +162,13 @@ export class PostifysClient {
           || (response.status === 402 ? 'BILLING_REQUIRED' : undefined)
           || (response.status === 429 ? 'RATE_LIMITED' : undefined)
           || `HTTP_${response.status}`;
-        throw new PostifysApiError(message, {
+        const apiError = new PostifysApiError(message, {
           statusCode: response.status,
           code,
           details: data.details || data,
-        });
+        }) as PostifysApiError & { retryAfterMs?: number | null };
+        apiError.retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+        throw apiError;
       }
 
       return data as T;

@@ -7,7 +7,7 @@ import { registerMediaTools } from './tools/media.js';
 import { registerPublishTools } from './tools/publish.js';
 import { registerContentQueueTools } from './tools/contentQueue.js';
 
-const PACKAGE_VERSION = '0.1.1';
+import { PACKAGE_VERSION } from './version.js';
 
 async function main() {
   let client: PostifysClient;

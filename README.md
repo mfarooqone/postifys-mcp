@@ -46,6 +46,11 @@ The package is free. Publishing still requires a Postifys entitlement (trial or 
 |---|---|---|
 | `POSTIFYS_API_KEY` | yes | — |
 | `POSTIFYS_SERVER_URL` | no | `https://postifys.com` |
+| `POSTIFYS_TIMEOUT_MS` | no | `60000` (per attempt) |
+| `POSTIFYS_MAX_RETRIES` | no | `3` |
+| `POSTIFYS_RETRY_BASE_MS` | no | `500` (exponential backoff + jitter; honours `Retry-After`) |
+
+Retries apply to 429/5xx/network errors on safe requests only. `postifys_publish` always sends an `Idempotency-Key` (auto-generated unless you pass `idempotencyKey`), so a retried publish is not duplicated. Other non-idempotent calls (media upload, retry post) are never auto-retried.
 
 ## Tools
 
@@ -53,7 +58,9 @@ The package is free. Publishing still requires a Postifys entitlement (trial or 
 
 **Media:** `postifys_media_upload` (queues + polls for `serve_url`), `postifys_media_status`
 
-**Publish:** `postifys_publish` (Facebook, Instagram, YouTube, Pinterest, LinkedIn, TikTok; always async), `postifys_get_post_status`
+**Publish:** `postifys_publish` (Facebook, Instagram, YouTube, Pinterest, LinkedIn, TikTok; async by default), `postifys_get_post_status`, `postifys_list_post_history`, `postifys_retry_post`
+
+`accountId` is optional: when omitted, Postifys uses your default/first connected account for that platform (Pinterest still needs `boardId`). Default `type`: Facebook `IMAGE` with media / `FEED` without; Instagram `IMAGE`. Pass `REEL` for video.
 
 **Content Queue:** `postifys_cq_overview`, `postifys_cq_list_tables`, `postifys_cq_create_table`, `postifys_cq_list_jobs`, `postifys_cq_create_or_update_job`, `postifys_cq_run_job_now`, `postifys_cq_list_items`, `postifys_cq_add_item`, `postifys_cq_import_rows`
 
@@ -77,6 +84,8 @@ npm install
 npm run build
 POSTIFYS_API_KEY=pfs_... npm start
 POSTIFYS_API_KEY=pfs_... npm run smoke
+npm run test:mcp                          # offline tests against a local mock API
+POSTIFYS_API_KEY=pfs_... npm run test:live  # full stdio run against production
 ```
 
 ## Links

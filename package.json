@@ -9,6 +9,8 @@
   "main": "./dist/index.js",
   "files": [
     "dist",
+    "!dist/test",
+    "!dist/test-mcp-full.*",
     "README.md",
     "LICENSE",
     "cursor.mcp.example.json"
@@ -19,7 +21,9 @@
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
     "smoke": "npm run build && node dist/smoke.js",
-    "test:mcp": "npm run build && node dist/test-mcp-full.js"
+    "test:mcp": "npm run build && node --test dist/test/mcp.test.js",
+    "test": "npm run build && node --test dist/test/mcp.test.js",
+    "test:live": "npm run build && node dist/test-mcp-full.js"
   },
   "keywords": [
     "mcp",
